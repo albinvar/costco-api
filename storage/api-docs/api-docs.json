@@ -1,0 +1,131 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Google Translate API Wrapper and Costco Translator",
+        "description": "This is a wrapper API for translating queries using Google Translate and searching Costco products.",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/api/v1/translate": {
+            "get": {
+                "tags": [
+                    "Translator"
+                ],
+                "summary": "Translate and search Costco products",
+                "description": "Translate user queries to English, search Costco, and return results in the user's language.",
+                "operationId": "translateAndSearch",
+                "parameters": [
+                    {
+                        "name": "query",
+                        "in": "query",
+                        "description": "Search query in user's language",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "цахилгаан хөргөгч"
+                        }
+                    },
+                    {
+                        "name": "lang",
+                        "in": "query",
+                        "description": "User's language code (e.g., 'mn' for Mongolian)",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "mn"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful translation and search results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "results": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "original_name": {
+                                                        "type": "string",
+                                                        "example": "Refrigerator"
+                                                    },
+                                                    "translated_name": {
+                                                        "type": "string",
+                                                        "example": "Хөргөгч"
+                                                    },
+                                                    "price": {
+                                                        "type": "number",
+                                                        "example": 399.99
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Missing or invalid parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Query and language are required."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "An error occurred. Please try again."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Translator",
+            "description": "Translator"
+        }
+    ]
+}
