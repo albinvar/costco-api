@@ -170,9 +170,7 @@ class TranslatorController extends Controller
         ]);
 
         $data = json_decode($response->getBody(), true);
-
-        dd(collect($data['response']['docs'][0])->toArray());
-        return $data['results'] ?? [];
+        return $data['response']['docs'] ?? [];
     }
 
     private function translateResults($client, $url, $token, $results, $lang)
