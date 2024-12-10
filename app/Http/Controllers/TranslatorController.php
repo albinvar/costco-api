@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -22,7 +23,7 @@ class TranslatorController extends Controller
      *     description="Translate user queries to English, search Costco, and return results in the user's language.",
      *     operationId="translateAndSearch",
      *     tags={"Translator"},
-     *     security={{"bearerAuth": {}}}, 
+     *     security={{"bearerAuth": {}}},
      *     @OA\Parameter(
      *         name="query",
      *         in="query",
@@ -170,45 +171,61 @@ class TranslatorController extends Controller
         ]);
 
         $data = json_decode($response->getBody(), true);
-        dd($data['response']['docs']);
+        // dd($data['response']['docs']);
         return $data['response']['docs'] ?? [];
     }
 
     private function translateResults($client, $url, $token, $results, $lang)
-{
-    $translatedResults = [];
+    {
+        $translatedResults = [];
 
-    foreach ($results as $result) {
-        try {
-            // Step 1: Dynamically identify fields to translate
-            $fieldsToTranslate = [];
-            $fieldKeys = []; // To keep track of the keys for mapping back
+        foreach ($results as $result) {
+            try {
+                // Use the product ID as the cache key
+                $cacheKey = "translated_product_{$result['id']}_{$lang}";
 
-            $this->extractTranslatableFields($result, $fieldsToTranslate, $fieldKeys);
+                // Check if the translation is already cached
+                $cachedTranslation = Cache::get($cacheKey);
 
-            // Step 2: Implode fields into a single string for translation
-            $textToTranslate = implode('||', $fieldsToTranslate);
+                if ($cachedTranslation) {
+                    // If cached, add it to the results
+                    $translatedResults[] = $cachedTranslation;
+                    continue;
+                }
 
-            // Step 3: Translate in one go
-            $translatedText = $this->translate($client, $url, $token, $textToTranslate, $lang);
+                // Step 1: Dynamically identify fields to translate
+                $fieldsToTranslate = [];
+                $fieldKeys = []; // To keep track of the keys for mapping back
 
-            if ($translatedText) {
-                // Step 4: Explode back into individual fields
-                $translatedFields = explode('||', $translatedText);
+                $this->extractTranslatableFields($result, $fieldsToTranslate, $fieldKeys);
 
-                // Step 5: Map translated fields back into the original structure
-                $translatedResult = $result; // Start with the original result
-                $this->mapTranslatedFields($translatedResult, $fieldKeys, $translatedFields);
+                // Step 2: Implode fields into a single string for translation
+                $textToTranslate = implode('||', $fieldsToTranslate);
 
-                $translatedResults[] = $translatedResult;
+                // Step 3: Translate in one go
+                $translatedText = $this->translate($client, $url, $token, $textToTranslate, $lang);
+
+                if ($translatedText) {
+                    // Step 4: Explode back into individual fields
+                    $translatedFields = explode('||', $translatedText);
+
+                    // Step 5: Map translated fields back into the original structure
+                    $translatedResult = $result; // Start with the original result
+                    $this->mapTranslatedFields($translatedResult, $fieldKeys, $translatedFields);
+
+                    // Cache the translated result for 1-4 days (adjust time as needed)
+                    \Cache::put($cacheKey, $translatedResult, now()->addDays(4));
+
+                    $translatedResults[] = $translatedResult;
+                }
+            } catch (\Exception $e) {
+                Log::error('Error translating result item', ['error' => $e->getMessage()]);
             }
-        } catch (\Exception $e) {
-            Log::error('Error translating result item', ['error' => $e->getMessage()]);
         }
+
+        return $translatedResults;
     }
 
-    return $translatedResults;
-}
 
 private function extractTranslatableFields($data, &$fieldsToTranslate, &$fieldKeys, $parentKey = '')
 {
