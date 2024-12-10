@@ -170,20 +170,94 @@ class TranslatorController extends Controller
         ]);
 
         $data = json_decode($response->getBody(), true);
+        dd($data['response']['docs']);
         return $data['response']['docs'] ?? [];
     }
 
     private function translateResults($client, $url, $token, $results, $lang)
-    {
-        $translatedResults = [];
-        foreach ($results as $result) {
-            $translatedName = $this->translate($client, $url, $token, $result['name'], $lang);
-            $translatedResults[] = [
-                'original_name' => $result['name'],
-                'translated_name' => $translatedName ?? $result['name'],
-                'price' => $result['price'] ?? null,
-            ];
+{
+    $translatedResults = [];
+
+    foreach ($results as $result) {
+        try {
+            // Step 1: Dynamically identify fields to translate
+            $fieldsToTranslate = [];
+            $fieldKeys = []; // To keep track of the keys for mapping back
+
+            $this->extractTranslatableFields($result, $fieldsToTranslate, $fieldKeys);
+
+            // Step 2: Implode fields into a single string for translation
+            $textToTranslate = implode('||', $fieldsToTranslate);
+
+            // Step 3: Translate in one go
+            $translatedText = $this->translate($client, $url, $token, $textToTranslate, $lang);
+
+            if ($translatedText) {
+                // Step 4: Explode back into individual fields
+                $translatedFields = explode('||', $translatedText);
+
+                // Step 5: Map translated fields back into the original structure
+                $translatedResult = $result; // Start with the original result
+                $this->mapTranslatedFields($translatedResult, $fieldKeys, $translatedFields);
+
+                $translatedResults[] = $translatedResult;
+            }
+        } catch (\Exception $e) {
+            Log::error('Error translating result item', ['error' => $e->getMessage()]);
         }
-        return $translatedResults;
     }
+
+    return $translatedResults;
+}
+
+private function extractTranslatableFields($data, &$fieldsToTranslate, &$fieldKeys, $parentKey = '')
+{
+    foreach ($data as $key => $value) {
+        $currentKey = $parentKey ? "{$parentKey}.{$key}" : $key;
+
+        if (is_string($value)) {
+            // Directly add string values
+            $fieldsToTranslate[] = $value;
+            $fieldKeys[] = $currentKey;
+        } elseif (is_array($value)) {
+            // If it's an array, check if it's an array of strings
+            if ($this->isArrayOfStrings($value)) {
+                $fieldsToTranslate[] = implode(', ', $value);
+                $fieldKeys[] = $currentKey;
+            } else {
+                // Recursively process nested arrays
+                $this->extractTranslatableFields($value, $fieldsToTranslate, $fieldKeys, $currentKey);
+            }
+        }
+    }
+}
+
+private function mapTranslatedFields(&$data, $fieldKeys, $translatedFields)
+{
+    foreach ($fieldKeys as $index => $key) {
+        $keys = explode('.', $key);
+        $target = &$data;
+
+        foreach ($keys as $subKey) {
+            if (!isset($target[$subKey])) {
+                $target[$subKey] = [];
+            }
+            $target = &$target[$subKey];
+        }
+
+        $translatedValue = $translatedFields[$index] ?? '';
+
+        if (is_array($target)) {
+            $target = explode(', ', $translatedValue);
+        } else {
+            $target = $translatedValue;
+        }
+    }
+}
+
+private function isArrayOfStrings($array)
+{
+    return is_array($array) && count($array) > 0 && count(array_filter($array, 'is_string')) === count($array);
+}
+
 }
